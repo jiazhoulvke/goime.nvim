@@ -100,8 +100,23 @@ function Client:connect(callback)
 
   local function on_connect(err)
     if err then
+      -- 连接失败（如 ECONNREFUSED 可能是 socket 残留）
+      -- 删除残留 socket，启动 goimed，重试
+      local stale = uv.fs_stat(socket_path)
+      if stale then
+        os.remove(socket_path)
+      end
+      local binary = self:_find_binary()
+      if binary ~= '' then
+        vim.fn.jobstart({ binary }, { detach = true })
+        vim.defer_fn(function()
+          attempt()
+        end, 500)
+        if callback then callback(true, 'starting goimed') end
+        return
+      end
       vim.schedule(function()
-        vim.notify('[goime] 连接失败: ' .. err, vim.log.levels.ERROR)
+        vim.notify('[goime] 连接失败: ' .. err .. '，请安装 goimed', vim.log.levels.ERROR)
       end)
       handle:close()
       if callback then vim.schedule(function() callback(false, err) end) end

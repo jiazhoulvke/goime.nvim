@@ -127,7 +127,7 @@ function Client:connect(callback)
     self.connected = true
     self.client = handle
     self.buffer = ''
-    self:_flush_pending()
+    vim.schedule(function() self:_flush_pending() end)
 
     -- 设置读取回调
     handle:read_start(function(read_err, data)

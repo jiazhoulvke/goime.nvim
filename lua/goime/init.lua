@@ -188,11 +188,14 @@ function M.setup(opts)
   -- 字母键映射（expr mode）
   for c in ('abcdefghijklmnopqrstuvwxyz'):gmatch('.') do
     vim.keymap.set('i', c, function()
-      if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
+      if not goime.plugin_enabled or not goime.chinese_mode then
         return c
       end
-      goime.client:input(c)
-      return ''
+      if goime.client then
+        goime.client:input(c)
+        return ''
+      end
+      return c
     end, { expr = true, silent = true })
   end
 

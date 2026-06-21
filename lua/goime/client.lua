@@ -21,9 +21,10 @@ Client.__index = Client
 function M.new()
   local self = setmetatable({}, Client)
   self.connected = false
-  self.client = nil          --- uv_pipe 句柄
-  self.buffer = ''           --- 接收缓冲区
-  self.callbacks = {}        --- 响应回调
+  self.client = nil
+  self.buffer = ''
+  self.pending = {}          --- 连接前缓冲的请求
+  self.callbacks = {}
   return self
 end
 
@@ -126,6 +127,7 @@ function Client:connect(callback)
     self.connected = true
     self.client = handle
     self.buffer = ''
+    self:_flush_pending()
 
     -- 设置读取回调
     handle:read_start(function(read_err, data)
@@ -238,7 +240,20 @@ end
 --- 发送按键输入
 ---@param key string 单个字母 (a-z)
 function Client:input(key)
+  if not self.connected then
+    table.insert(self.pending, { method = 'input', key = key })
+    return
+  end
   self:_send({ method = 'input', key = key })
+end
+
+--- 连接后发送缓冲的请求
+function Client:_flush_pending()
+  if not self.connected then return end
+  for _, msg in ipairs(self.pending) do
+    self:_send(msg)
+  end
+  self.pending = {}
 end
 
 --- 上屏原始输入码

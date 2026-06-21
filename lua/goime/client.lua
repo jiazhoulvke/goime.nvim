@@ -111,9 +111,7 @@ function Client:connect(callback)
         local binary = self:_find_binary()
         if binary ~= '' then
           vim.fn.jobstart({ binary }, { detach = true })
-          vim.defer_fn(function()
-            attempt()
-          end, 500)
+          vim.defer_fn(function() self:connect(callback) end, 500)
           if callback then callback(true, 'starting goimed') end
           return
         end

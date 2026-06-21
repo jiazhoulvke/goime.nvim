@@ -108,7 +108,7 @@ function Client:connect(callback)
       end
       local binary = self:_find_binary()
       if binary ~= '' then
-        vim.fn.jobstart({ binary }, { detach = true })
+        vim.schedule(function() vim.fn.jobstart({ binary }, { detach = true }) end)
         vim.defer_fn(function()
           attempt()
         end, 500)

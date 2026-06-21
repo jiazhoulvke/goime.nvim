@@ -106,20 +106,20 @@ function Client:connect(callback)
       if stale then
         os.remove(socket_path)
       end
-      local binary = self:_find_binary()
-      if binary ~= '' then
-        vim.schedule(function() vim.fn.jobstart({ binary }, { detach = true }) end)
-        vim.defer_fn(function()
-          attempt()
-        end, 500)
-        if callback then callback(true, 'starting goimed') end
-        return
-      end
       vim.schedule(function()
-        vim.notify('[goime] 连接失败: ' .. err .. '，请安装 goimed', vim.log.levels.ERROR)
+        local binary = self:_find_binary()
+        if binary ~= '' then
+          vim.fn.jobstart({ binary }, { detach = true })
+          vim.defer_fn(function()
+            attempt()
+          end, 500)
+          if callback then callback(true, 'starting goimed') end
+          return
+        end
+        vim.notify('[goime] 连接失败，请安装 goimed', vim.log.levels.ERROR)
+        handle:close()
+        if callback then callback(false, 'binary not found') end
       end)
-      handle:close()
-      if callback then vim.schedule(function() callback(false, err) end) end
       return
     end
 

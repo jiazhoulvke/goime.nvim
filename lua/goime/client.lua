@@ -41,10 +41,12 @@ function Client:_socket_path()
   end
   local runtime_dir = vim.fn.environ()['XDG_RUNTIME_DIR']
   if runtime_dir then
-    local candidate = runtime_dir .. '/goime.sock'
-    if socket_exists(candidate) then
-      return candidate
-    end
+    return runtime_dir .. '/goime.sock'
+  end
+  local tmpdir = vim.fn.environ()['TMPDIR']
+  if tmpdir then
+    local uid = vim.fn.system('id -u'):gsub('%s+', '')
+    return tmpdir .. '/goime-' .. uid .. '.sock'
   end
   local uid = vim.fn.system('id -u'):gsub('%s+', '')
   return '/tmp/goime-' .. uid .. '.sock'

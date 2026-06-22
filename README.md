@@ -37,6 +37,9 @@ require('goime').setup({
   -- 是否默认启用插件（false=禁用，按 <C-;> 启用或传 true 表示默认启用）
   enabled = false,
 
+  -- 默认中文模式（true=中文，false=英文；仅 enabled=true 时生效）
+  default_chinese = true,
+
   -- Socket 路径（空=自动推导）
   socket_path = '',
 

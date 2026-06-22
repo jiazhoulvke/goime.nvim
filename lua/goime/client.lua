@@ -1,4 +1,4 @@
--- lua/goime/client.lua — GoIME Unix Socket 客户端（Neovim）
+-- lua/goime/client.lua — GoIME Unix Socket/TCP 客户端（Neovim）
 
 local uv = vim.uv or vim.loop
 local config = require('goime.config')
@@ -72,54 +72,34 @@ function Client:connect(callback)
     return
   end
 
-  local socket_path = self:_socket_path()
-
-  -- socket 不存在时尝试启动 goimed
-  if not socket_exists(socket_path) then
-    local binary = self:_find_binary()
-    if binary == '' then
-      vim.notify('[goime] goimed 未找到，请先安装：go install github.com/jiazhoulvke/goime/cmd/goimed@latest',
-        vim.log.levels.ERROR)
-      if callback then callback(false, 'goimed not found') end
-      return
-    end
-    -- 异步启动 goimed
-    vim.fn.jobstart({ binary }, {
-      detach = true,
-      on_stderr = function(_, data)
-        if data and config.config.debug then
-          vim.notify('[goime] ' .. vim.inspect(data), vim.log.levels.DEBUG)
-        end
-      end,
-    })
+  -- TCP 模式（配置了 port）
+  if config.config.port then
+    self:_connect_tcp(callback)
+    return
   end
 
-  -- 创建 Unix 连接
-  local handle = uv.new_pipe(false)
+  -- Unix socket 模式
+  self:_connect_unix(callback)
+end
+
+--- TCP 连接
+---@param callback fun(success: boolean, msg: string)|nil
+function Client:_connect_tcp(callback)
+  local host = config.config.host or '127.0.0.1'
+  local port = config.config.port
+
+  local handle = uv.new_tcp()
   if not handle then
-    if callback then callback(false, 'failed to create pipe') end
+    if callback then callback(false, 'failed to create tcp handle') end
     return
   end
 
   local function on_connect(err)
     if err then
-      -- 连接失败（如 ECONNREFUSED 可能是 socket 残留）
-      -- 删除残留 socket，启动 goimed，重试
-      local stale = uv.fs_stat(socket_path)
-      if stale then
-        os.remove(socket_path)
-      end
       vim.schedule(function()
-        local binary = self:_find_binary()
-        if binary ~= '' then
-          vim.fn.jobstart({ binary }, { detach = true })
-          vim.defer_fn(function() self:connect(callback) end, 500)
-          if callback then callback(true, 'starting goimed') end
-          return
-        end
-        vim.notify('[goime] 连接失败，请安装 goimed', vim.log.levels.ERROR)
+        vim.notify('[goime] TCP 连接失败: ' .. tostring(err), vim.log.levels.ERROR)
         handle:close()
-        if callback then callback(false, 'binary not found') end
+        if callback then callback(false, 'connection failed') end
       end)
       return
     end
@@ -145,30 +125,115 @@ function Client:connect(callback)
       end
     end)
 
-    -- 连接成功，发送握手（推迟到主循环，避免 fast event）
+    -- 握手
     vim.schedule(function()
       local hello = { method = 'hello', version = 1, client = config.config.client_name }
-    if config.config.page_size and config.config.page_size > 0 then
-      hello.page_size = config.config.page_size
+      if config.config.page_size and config.config.page_size > 0 then
+        hello.page_size = config.config.page_size
+      end
+      if config.config.schemes and #config.config.schemes > 0 then
+        hello.schemes = config.config.schemes
+      end
+      self:_send(hello)
+    end)
+
+    if callback then vim.schedule(function() callback(true, 'connected') end) end
+  end
+
+  handle:connect(host, port, on_connect)
+end
+
+--- Unix socket 连接
+---@param callback fun(success: boolean, msg: string)|nil
+function Client:_connect_unix(callback)
+  local socket_path = self:_socket_path()
+
+  -- socket 不存在时尝试启动 goimed
+  if not socket_exists(socket_path) then
+    local binary = self:_find_binary()
+    if binary == '' then
+      vim.notify('[goime] goimed 未找到，请先安装：go install github.com/jiazhoulvke/goime/cmd/goimed@latest',
+        vim.log.levels.ERROR)
+      if callback then callback(false, 'goimed not found') end
+      return
     end
-    if config.config.schemes and #config.config.schemes > 0 then
-      hello.schemes = config.config.schemes
+    -- 异步启动 goimed
+    vim.fn.jobstart({ binary }, {
+      detach = true,
+      on_stderr = function(_, data)
+        if data and config.config.debug then
+          vim.notify('[goime] ' .. vim.inspect(data), vim.log.levels.DEBUG)
+        end
+      end,
+    })
+  end
+
+  local handle = uv.new_pipe(false)
+  if not handle then
+    if callback then callback(false, 'failed to create pipe') end
+    return
+  end
+
+  local function on_connect(err)
+    if err then
+      local stale = uv.fs_stat(socket_path)
+      if stale then
+        os.remove(socket_path)
+      end
+      vim.schedule(function()
+        local binary = self:_find_binary()
+        if binary ~= '' then
+          vim.fn.jobstart({ binary }, { detach = true })
+          vim.defer_fn(function() self:connect(callback) end, 500)
+          if callback then callback(true, 'starting goimed') end
+          return
+        end
+        vim.notify('[goime] 连接失败，请安装 goimed', vim.log.levels.ERROR)
+        handle:close()
+        if callback then callback(false, 'binary not found') end
+      end)
+      return
     end
-    self:_send(hello)
+
+    self.connected = true
+    self.client = handle
+    self.buffer = ''
+    vim.schedule(function() self:_flush_pending() end)
+
+    handle:read_start(function(read_err, data)
+      if read_err then
+        vim.schedule(function()
+          vim.notify('[goime] 读取错误: ' .. read_err, vim.log.levels.ERROR)
+        end)
+        self:disconnect()
+        return
+      end
+      if data then
+        vim.schedule(function()
+          self:_on_data(data)
+        end)
+      end
+    end)
+
+    vim.schedule(function()
+      local hello = { method = 'hello', version = 1, client = config.config.client_name }
+      if config.config.page_size and config.config.page_size > 0 then
+        hello.page_size = config.config.page_size
+      end
+      if config.config.schemes and #config.config.schemes > 0 then
+        hello.schemes = config.config.schemes
+      end
+      self:_send(hello)
     end)
 
     if callback then vim.schedule(function() callback(true, 'connected') end) end
   end
 
   -- 尝试连接（带重试）
-  local retries = 0
-  local max_retries = 10
-
   local function attempt()
     handle:connect(socket_path, on_connect)
   end
 
-  -- 如果 socket 还不可用，先等待
   if not socket_exists(socket_path) then
     vim.defer_fn(function()
       attempt()
@@ -254,63 +319,17 @@ function Client:_flush_pending()
     self:_send(msg)
   end
   self.pending = {}
-end
+function Client:enter() self:_send({ method = 'enter' }) end
+function Client:escape() self:_send({ method = 'escape' }) end
+function Client:backspace() self:_send({ method = 'backspace' }) end
+function Client:space() self:_send({ method = 'space' }) end
+function Client:select(index) self:_send({ method = 'select', index = index }) end
+function Client:page(dir) self:_send({ method = 'page', dir = dir }) end
+function Client:arrow(dir) self:_send({ method = 'arrow', dir = dir }) end
+function Client:set_scheme(name) self:_send({ method = 'set_scheme', name = name }) end
+function Client:commit_preedit() self:_send({ method = 'commit_preedit' }) end
+function Client:reset() self:_send({ method = 'reset' }) end
 
---- 上屏原始输入码
-function Client:enter()
-  self:_send({ method = 'enter' })
-end
-
---- 清空缓冲区
-function Client:escape()
-  self:_send({ method = 'escape' })
-end
-
---- 退格
-function Client:backspace()
-  self:_send({ method = 'backspace' })
-end
-
---- 空格（选首选或上屏原始输入码）
-function Client:space()
-  self:_send({ method = 'space' })
-end
-
---- 选择候选词
----@param index number 0-based 索引
-function Client:select(index)
-  self:_send({ method = 'select', index = index })
-end
-
---- 翻页
----@param dir string "next" 或 "prev"
-function Client:page(dir)
-  self:_send({ method = 'page', dir = dir })
-end
-
---- 方向键
----@param dir string "up", "down", "left", "right"
-function Client:arrow(dir)
-  self:_send({ method = 'arrow', dir = dir })
-end
-
---- 切换输入方案
----@param name string 方案名
-function Client:set_scheme(name)
-  self:_send({ method = 'set_scheme', name = name })
-end
-
---- 上屏当前输入码
-function Client:commit_preedit()
-  self:_send({ method = 'commit_preedit' })
-end
-
---- 重置状态
-function Client:reset()
-  self:_send({ method = 'reset' })
-end
-
---- 发送配置更新（分页大小、启用方案）
 function Client:send_config()
   local msg = { method = 'config', page_size = config.config.page_size or 5 }
   if config.config.schemes and #config.config.schemes > 0 then
@@ -319,10 +338,6 @@ function Client:send_config()
   self:_send(msg)
 end
 
---- 返回是否已连接
----@return boolean
-function Client:is_connected()
-  return self.connected
-end
+function Client:is_connected() return self.connected end
 
 return M

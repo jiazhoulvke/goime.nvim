@@ -8,6 +8,10 @@ M.defaults = {
   socket_path = '',
   --- goimed 可执行文件路径，空则从 PATH 查找
   binary = '',
+  --- TCP 连接地址（port 非空时启用 TCP 模式）
+  host = '127.0.0.1',
+  --- TCP 端口，设置后启用 TCP 连接（空=使用 Unix socket）
+  port = nil,
   --- 中文模式状态栏显示文本
   status_cn = '中',
   --- 英文模式状态栏显示文本

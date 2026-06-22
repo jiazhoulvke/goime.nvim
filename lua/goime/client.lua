@@ -204,12 +204,9 @@ function Client:_start_goimed_tcp(port, callback)
     return
   end
 
-  vim.notify('[goime] 正在启动 goimed (TCP :' .. port .. ')', vim.log.levels.INFO)
   local host = config.config.host or '127.0.0.1'
   vim.notify('[goime] 正在启动 goimed (TCP ' .. host .. ':' .. port .. ')', vim.log.levels.INFO)
   vim.fn.jobstart({ binary, '--listen', 'tcp', '--host', host, '--port', tostring(port) }, { detach = true })
-
-  local host = config.config.host or '127.0.0.1'
   local retries = 0
   local max_retries = 12
 
@@ -415,6 +412,8 @@ function Client:_flush_pending()
     self:_send(msg)
   end
   self.pending = {}
+end
+
 function Client:enter() self:_send({ method = 'enter' }) end
 function Client:escape() self:_send({ method = 'escape' }) end
 function Client:backspace() self:_send({ method = 'backspace' }) end

@@ -313,6 +313,9 @@ function M.toggle_enabled()
   status.update({ plugin_enabled = goime.plugin_enabled })
   vim.cmd('redrawstatus!')
   if goime.plugin_enabled then
+    if not goime.client or not goime.client:is_connected() then
+      M.connect()
+    end
     vim.notify('GoIME: 已启用', vim.log.levels.INFO)
   else
     vim.notify('GoIME: 已禁用', vim.log.levels.INFO)

@@ -108,6 +108,8 @@ function Client:_read_port_file()
   if ok and #lines > 0 then
     local p = tonumber(lines[1])
     if p and p > 0 then return p end
+  elseif not ok then
+    vim.schedule(function() vim.api.nvim_notify('[goime] 读取端口文件失败: ' .. tostring(lines), vim.log.levels.WARN, {}) end)
   end
   return nil
 end
@@ -386,6 +388,8 @@ function Client:_on_data(data)
     local ok, resp = pcall(vim.fn.json_decode, line)
     if ok and type(resp) == 'table' then
       self:_handle_response(resp)
+    elseif not ok then
+      vim.schedule(function() vim.api.nvim_notify('[goime] JSON 解析失败: ' .. tostring(resp) .. ' | ' .. line, vim.log.levels.WARN, {}) end)
     end
     ::continue::
   end

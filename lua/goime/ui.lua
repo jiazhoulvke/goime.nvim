@@ -41,15 +41,7 @@ end
 local function calc_size(lines)
   local max_width = 20
   for _, line in ipairs(lines) do
-    -- 中文字符算 2 个宽度
-    local w = 0
-    for char in line:gmatch('.') do
-      if char:match('[一-龥]') then
-        w = w + 2
-      else
-        w = w + 1
-      end
-    end
+    local w = vim.api.nvim_strwidth(line)
     if w > max_width then
       max_width = w
     end
@@ -121,7 +113,7 @@ function UI:show(list, page, total_pages, preedit_text)
   end
 
   local win_id = api.nvim_open_win(buf, false, opts)
-  api.nvim_win_set_option(win_id, 'winhl', 'Normal:Pmenu')
+  vim.wo[win_id].winhighlight = 'Normal:Pmenu'
 
   self.win_id = win_id
   self.buf_id = buf

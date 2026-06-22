@@ -98,9 +98,9 @@ end
 --- 读取端口文件
 ---@return number|nil
 function Client:_read_port_file()
-  local home = (vim.fn.expand('$HOME') or ''):gsub('', '/')
+  local home = (vim.fn.expand('$HOME') or ''):gsub('\\', '/')
   if home == '' then
-    home = (vim.fn.expand('$USERPROFILE') or ''):gsub('', '/')
+    home = (vim.fn.expand('$USERPROFILE') or ''):gsub('\\', '/')
   end
   if home == '' then return nil end
   local path = home .. '/.cache/goime/goime.port'

@@ -10,6 +10,16 @@ local status = require('goime.status')
 
 local M = {}
 
+--- 保存当前 buffer/cursor 上下文（发送按键前调用）
+local function save_input_context()
+  goime.input_context = {
+    bufnr = api.nvim_get_current_buf(),
+    win = api.nvim_get_current_win(),
+    row = api.nvim_win_get_cursor(0)[1],
+    col = api.nvim_win_get_cursor(0)[2],
+  }
+end
+
 --- 插件实例状态
 local goime = {
   client = nil,         ---@type table
@@ -19,6 +29,7 @@ local goime = {
   preedit_text = '',
   schemes = {},
   active_scheme = '', --- 插件是否启用
+  input_context = nil,  --- 发送按键时的 buffer/window/cursor 上下文
 }
 
 --- 设置插件
@@ -42,13 +53,25 @@ function M.setup(opts)
   goime.client:on('commit', function(resp)
     local text = resp.text or ''
     if text ~= '' then
-      -- 插入文本到当前缓冲区
-      local bufnr = api.nvim_get_current_buf()
-      local row, col = unpack(api.nvim_win_get_cursor(0))
+      -- 使用发送按键时保存的 buffer/cursor 上下文
+      local ctx = goime.input_context
+      local bufnr, win, row, col
+      if ctx and api.nvim_buf_is_valid(ctx.bufnr) and api.nvim_win_is_valid(ctx.win) then
+        bufnr = ctx.bufnr
+        win = ctx.win
+        row, col = ctx.row, ctx.col
+      else
+        bufnr = api.nvim_get_current_buf()
+        win = api.nvim_get_current_win()
+        local cursor = api.nvim_win_get_cursor(0)
+        row, col = cursor[1], cursor[2]
+      end
       local line = api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
       local new_line = line:sub(1, col) .. text .. line:sub(col + 1)
       api.nvim_buf_set_lines(bufnr, row - 1, row, false, { new_line })
-      api.nvim_win_set_cursor(0, { row, col + #text })
+      if win == api.nvim_get_current_win() then
+        api.nvim_win_set_cursor(0, { row, col + #text })
+      end
     end
 
     -- 部分提交：commit 中可能附带剩余输入的候选项
@@ -191,6 +214,7 @@ function M.setup(opts)
         return c
       end
       if goime.client then
+        save_input_context()
         goime.client:input(c)
         return ''
       end
@@ -210,6 +234,7 @@ function M.setup(opts)
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
       return '<Space>'
     end
+    save_input_context()
     goime.client:space()
     return ''
   end, { expr = true, silent = true })
@@ -231,6 +256,7 @@ function M.setup(opts)
     end
     if goime.plugin_enabled and goime.client and goime.client:is_connected() and goime.chinese_mode then
       if goime.preedit_text and goime.preedit_text ~= '' then
+        save_input_context()
         goime.client:enter()
         return ''
       end
@@ -252,6 +278,7 @@ function M.setup(opts)
       if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
         return tostring(i)
       end
+      save_input_context()
       goime.client:select(i - 1)
       return ''
     end, { expr = true, silent = true })
@@ -261,6 +288,7 @@ function M.setup(opts)
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
       return '0'
     end
+    save_input_context()
     goime.client:select(9)
     return ''
   end, { expr = true, silent = true })
@@ -361,6 +389,7 @@ function M.on_insert_enter()
     end
     if goime.plugin_enabled and goime.client and goime.client:is_connected() and goime.chinese_mode then
       if goime.preedit_text and goime.preedit_text ~= '' then
+        save_input_context()
         goime.client:enter()
         return ''
       end
@@ -381,6 +410,7 @@ function M.on_insert_enter()
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
       return '<Space>'
     end
+    save_input_context()
     goime.client:space()
     return ''
   end, { expr = true, desc = 'GoIME 空格', buffer = true })

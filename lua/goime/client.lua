@@ -255,14 +255,28 @@ end
 ---@param callback fun(success: boolean, msg: string)|nil
 function Client:_connect_unix(callback)
   local socket_path = self:_socket_path()
+  local callback_called = false
 
-  -- socket 不存在时尝试启动 goimed
+  local function safe_callback(success, msg)
+    if not callback_called and callback then
+      callback_called = true
+      vim.schedule(function() callback(success, msg) end)
+    end
+  end
+
+  -- socket 不存在时尝试启动 goimed（仅一次）
   if not socket_exists(socket_path) then
+    if self._starting then
+      vim.defer_fn(function() self:connect(callback) end, 500)
+      return
+    end
+    self._starting = true
     local binary = self:_find_binary()
     if binary == '' then
       vim.notify('[goime] goimed 未找到，请先安装：go install github.com/jiazhoulvke/goime/cmd/goimed@latest',
         vim.log.levels.ERROR)
-      if callback then callback(false, 'goimed not found') end
+      self._starting = false
+      safe_callback(false, 'goimed not found')
       return
     end
     -- 异步启动 goimed
@@ -291,18 +305,20 @@ function Client:_connect_unix(callback)
       vim.schedule(function()
         local binary = self:_find_binary()
         if binary ~= '' then
-          vim.fn.jobstart({ binary }, { detach = true })
+          -- 不重复启动 goimed，仅重试连接
+          self._starting = false
           vim.defer_fn(function() self:connect(callback) end, 500)
-          if callback then callback(true, 'starting goimed') end
+          safe_callback(false, 'retrying connection')
           return
         end
         vim.notify('[goime] 连接失败，请安装 goimed', vim.log.levels.ERROR)
         handle:close()
-        if callback then callback(false, 'binary not found') end
+        safe_callback(false, 'binary not found')
       end)
       return
     end
 
+    self._starting = false
     self.connected = true
     self.client = handle
     self.buffer = ''
@@ -334,7 +350,7 @@ function Client:_connect_unix(callback)
       self:_send(hello)
     end)
 
-    if callback then vim.schedule(function() callback(true, 'connected') end) end
+    if callback then vim.schedule(function() safe_callback(true, 'connected') end) end
   end
 
   -- 尝试连接（带重试）
@@ -354,12 +370,15 @@ end
 --- 断开连接
 function Client:disconnect()
   if self.client then
-    self.client:read_stop()
-    self.client:close()
+    if not self.client:is_closing() then
+      self.client:read_stop()
+      self.client:close()
+    end
   end
   self.client = nil
   self.connected = false
   self.buffer = ''
+  self.pending = {}
 end
 
 --- 发送 JSON Lines 消息
@@ -369,7 +388,14 @@ function Client:_send(msg)
     return
   end
   local json = vim.fn.json_encode(msg)
-  self.client:write(json .. '\n')
+  self.client:write(json .. '\n', function(err)
+    if err then
+      vim.schedule(function()
+        vim.api.nvim_notify('[goime] 写入失败: ' .. tostring(err), vim.log.levels.WARN, {})
+      end)
+      self:disconnect()
+    end
+  end)
 end
 
 --- 处理接收到的数据

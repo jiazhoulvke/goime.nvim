@@ -6,6 +6,8 @@ local M = {}
 M.defaults = {
   --- 是否默认启用插件（false=禁用，用户需按 <C-;> 启用或设置 enabled=true）
   enabled = false,
+  --- 默认中文模式（true=中文，false=英文；仅 enabled=true 时生效）
+  default_chinese = true,
   --- Socket 路径，空则自动推导
   socket_path = '',
   --- goimed 可执行文件路径，空则从 PATH 查找

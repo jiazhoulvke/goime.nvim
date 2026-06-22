@@ -216,6 +216,15 @@ function M.setup(opts)
   end, { expr = true, silent = true })
 
   -- 退格
+  -- 退格：删除拼音输入
+  vim.keymap.set('i', k(map.backspace, '<BS>'), function()
+    if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
+      return '<BS>'
+    end
+    goime.client:backspace()
+    return ''
+  end, { expr = true, silent = true })
+
   -- 回车：先发 enter 给 goime，再插入回车
   vim.keymap.set('i', k(map.enter, '<CR>'), function()
     if completion_active() then
@@ -327,14 +336,6 @@ function M.on_insert_enter()
   if not goime.plugin_enabled then
     return
   end
-  -- 为当前缓冲区注册局部 BS 映射（防止 autopairs 等插件拦截）
-  vim.keymap.set('i', '<BS>', function()
-    if goime.plugin_enabled and goime.client and goime.client:is_connected() and goime.chinese_mode then
-      goime.client:backspace()
-      return ''
-    end
-    return '<BS>'
-  end, { expr = true, desc = 'GoIME 退格', buffer = true })
   if not goime.client or not goime.client:is_connected() then
     M.connect()
   end

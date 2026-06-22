@@ -61,6 +61,19 @@ function Client:_find_binary()
   if vim.fn.executable('goimed') == 1 then
     return 'goimed'
   end
+  -- GVim/桌面环境可能不含 ~/go/bin，检查常见位置
+  local home = vim.fn.expand('$HOME')
+  if home and home ~= '' then
+    local candidates = {
+      home .. '/go/bin/goimed',
+      home .. '/.go/bin/goimed',
+    }
+    for _, candidate in ipairs(candidates) do
+      if vim.fn.executable(candidate) == 1 then
+        return candidate
+      end
+    end
+  end
   return ''
 end
 

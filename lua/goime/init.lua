@@ -130,15 +130,14 @@ function M.setup(opts)
   -- 设置自动命令
   local augroup = api.nvim_create_augroup('goime', { clear = true })
 
-  if config.config.auto_connect then
-    api.nvim_create_autocmd('InsertEnter', {
-      group = augroup,
-      desc = '进入插入模式时连接 GoIME',
-      callback = function()
-        M.on_insert_enter()
-      end,
-    })
-  end
+  -- InsertEnter 始终注册：注册 buffer-local BS 映射（覆盖 autopairs 等）
+  api.nvim_create_autocmd('InsertEnter', {
+    group = augroup,
+    desc = '进入插入模式时注册 buffer-local 映射并按需连接 GoIME',
+    callback = function()
+      M.on_insert_enter()
+    end,
+  })
 
   api.nvim_create_autocmd('InsertLeave', {
     group = augroup,
@@ -331,13 +330,22 @@ function M.toggle_enabled()
   end
 end
 
---- 进入插入模式时自动连接
+--- 进入插入模式时注册 buffer-local 映射并按需连接
 function M.on_insert_enter()
-  if not goime.plugin_enabled then
-    return
-  end
-  if not goime.client or not goime.client:is_connected() then
-    M.connect()
+  -- 始终为当前 buffer 注册局部 BS 映射（优先级高于 autopairs 等插件）
+  vim.keymap.set('i', '<BS>', function()
+    if goime.plugin_enabled and goime.client and goime.client:is_connected() and goime.chinese_mode then
+      goime.client:backspace()
+      return ''
+    end
+    return '<BS>'
+  end, { expr = true, desc = 'GoIME 退格', buffer = true })
+
+  -- 仅在启用且 auto_connect 时自动连接
+  if goime.plugin_enabled and config.config.auto_connect then
+    if not goime.client or not goime.client:is_connected() then
+      M.connect()
+    end
   end
 end
 

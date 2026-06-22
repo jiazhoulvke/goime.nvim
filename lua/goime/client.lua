@@ -82,65 +82,159 @@ function Client:connect(callback)
   self:_connect_unix(callback)
 end
 
---- TCP 连接
+--- 读取端口文件
+---@return number|nil
+function Client:_read_port_file()
+  local home = (vim.fn.expand('$HOME') or ''):gsub('', '/')
+  if home == '' then
+    home = (vim.fn.expand('$USERPROFILE') or ''):gsub('', '/')
+  end
+  if home == '' then return nil end
+  local path = home .. '/.cache/goime/goime.port'
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if ok and #lines > 0 then
+    local p = tonumber(lines[1])
+    if p and p > 0 then return p end
+  end
+  return nil
+end
+
+--- TCP 连接（含自动发现：直接连接 → 端口文件 → 自动启动）
 ---@param callback fun(success: boolean, msg: string)|nil
 function Client:_connect_tcp(callback)
   local host = config.config.host or '127.0.0.1'
-  local port = config.config.port
+  local configured_port = config.config.port
 
-  local handle = uv.new_tcp()
-  if not handle then
-    if callback then callback(false, 'failed to create tcp handle') end
+  -- 收集待尝试的端口列表
+  local ports = {}
+  if configured_port and configured_port > 0 then
+    table.insert(ports, configured_port)
+  end
+  local pf = self:_read_port_file()
+  if pf and pf ~= configured_port then
+    table.insert(ports, pf)
+  end
+
+  if #ports == 0 then
+    self:_start_goimed_tcp(11527, callback)
+    return
+  end
+  self:_try_tcp_ports(host, ports, 1, callback)
+end
+
+--- 依次尝试多个端口，全部失败则自动启动
+function Client:_try_tcp_ports(host, ports, index, callback)
+  if index > #ports then
+    local port = 11527
+    if config.config.port and config.config.port > 0 then
+      port = config.config.port
+    end
+    self:_start_goimed_tcp(port, callback)
     return
   end
 
-  local function on_connect(err)
-    if err then
-      vim.schedule(function()
-        vim.notify('[goime] TCP 连接失败: ' .. tostring(err), vim.log.levels.ERROR)
-        handle:close()
-        if callback then callback(false, 'connection failed') end
-      end)
-      return
-    end
-
-    self.connected = true
-    self.client = handle
-    self.buffer = ''
-    vim.schedule(function() self:_flush_pending() end)
-
-    -- 设置读取回调
-    handle:read_start(function(read_err, data)
-      if read_err then
-        vim.schedule(function()
-          vim.notify('[goime] 读取错误: ' .. read_err, vim.log.levels.ERROR)
-        end)
-        self:disconnect()
-        return
-      end
-      if data then
-        vim.schedule(function()
-          self:_on_data(data)
-        end)
-      end
-    end)
-
-    -- 握手
-    vim.schedule(function()
-      local hello = { method = 'hello', version = 1, client = config.config.client_name }
-      if config.config.page_size and config.config.page_size > 0 then
-        hello.page_size = config.config.page_size
-      end
-      if config.config.schemes and #config.config.schemes > 0 then
-        hello.schemes = config.config.schemes
-      end
-      self:_send(hello)
-    end)
-
-    if callback then vim.schedule(function() callback(true, 'connected') end) end
+  local port = ports[index]
+  local handle = uv.new_tcp()
+  if not handle then
+    self:_try_tcp_ports(host, ports, index + 1, callback)
+    return
   end
 
-  handle:connect(host, port, on_connect)
+  local timedout = false
+  local timer = vim.defer_fn(function()
+    timedout = true
+    handle:close()
+    self:_try_tcp_ports(host, ports, index + 1, callback)
+  end, 1500)
+
+  handle:connect(host, port, function(err)
+    if timedout then return end
+    timer:close()
+    if err then
+      self:_try_tcp_ports(host, ports, index + 1, callback)
+      return
+    end
+    self:_on_tcp_connected(handle, callback)
+  end)
+end
+
+--- TCP 连接成功后初始化
+function Client:_on_tcp_connected(handle, callback)
+  handle = handle or self.client
+  self.connected = true
+  self.client = handle
+  self.buffer = ''
+  vim.schedule(function() self:_flush_pending() end)
+
+  handle:read_start(function(read_err, data)
+    if read_err then
+      vim.schedule(function()
+        vim.notify('[goime] 读取错误: ' .. read_err, vim.log.levels.ERROR)
+      end)
+      self:disconnect()
+      return
+    end
+    if data then
+      vim.schedule(function() self:_on_data(data) end)
+    end
+  end)
+
+  vim.schedule(function()
+    local hello = { method = 'hello', version = 1, client = config.config.client_name }
+    if config.config.page_size and config.config.page_size > 0 then
+      hello.page_size = config.config.page_size
+    end
+    if config.config.schemes and #config.config.schemes > 0 then
+      hello.schemes = config.config.schemes
+    end
+    self:_send(hello)
+  end)
+
+  if callback then vim.schedule(function() callback(true, 'connected') end) end
+end
+
+--- 自动启动 goimed（TCP 模式）并等待连接
+function Client:_start_goimed_tcp(port, callback)
+  local binary = self:_find_binary()
+  if binary == '' then
+    vim.schedule(function()
+      vim.notify('[goime] goimed 未找到', vim.log.levels.ERROR)
+    end)
+    if callback then callback(false, 'goimed not found') end
+    return
+  end
+
+  vim.notify('[goime] 正在启动 goimed (TCP :' .. port .. ')', vim.log.levels.INFO)
+  vim.fn.jobstart({ binary, '--listen', 'tcp', '--port', tostring(port) }, { detach = true })
+
+  local host = config.config.host or '127.0.0.1'
+  local retries = 0
+  local max_retries = 12
+
+  local function try_connect()
+    local h = uv.new_tcp()
+    if not h then
+      if callback then callback(false, 'failed to create handle') end
+      return
+    end
+    h:connect(host, port, function(err)
+      if err then
+        retries = retries + 1
+        if retries < max_retries then
+          vim.defer_fn(try_connect, 500)
+        else
+          vim.schedule(function()
+            vim.notify('[goime] goimed 启动超时', vim.log.levels.ERROR)
+          end)
+          if callback then callback(false, 'start timeout') end
+        end
+        return
+      end
+      self:_on_tcp_connected(h, callback)
+    end)
+  end
+
+  vim.defer_fn(try_connect, 500)
 end
 
 --- Unix socket 连接

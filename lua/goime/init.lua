@@ -332,14 +332,58 @@ end
 
 --- 进入插入模式时注册 buffer-local 映射并按需连接
 function M.on_insert_enter()
-  -- 始终为当前 buffer 注册局部 BS 映射（优先级高于 autopairs 等插件）
-  vim.keymap.set('i', '<BS>', function()
+  local map = config.config.mappings or {}
+  local function k(key, fallback)
+    return (key ~= nil and key ~= '') and key or fallback
+  end
+
+  -- 补菜单打开时让给补全插件
+  local function completion_active()
+    if vim.fn.pumvisible() == 1 then return true end
+    if pcall(require, 'blink.cmp') and require('blink.cmp').is_visible() then return true end
+    return false
+  end
+
+  -- 为当前 buffer 注册局部映射（优先级高于 autopairs 等插件）
+  -- BS
+  vim.keymap.set('i', k(map.backspace, '<BS>'), function()
     if goime.plugin_enabled and goime.client and goime.client:is_connected() and goime.chinese_mode then
       goime.client:backspace()
       return ''
     end
     return '<BS>'
   end, { expr = true, desc = 'GoIME 退格', buffer = true })
+
+  -- CR
+  vim.keymap.set('i', k(map.enter, '<CR>'), function()
+    if completion_active() then
+      return '<CR>'
+    end
+    if goime.plugin_enabled and goime.client and goime.client:is_connected() and goime.chinese_mode then
+      if goime.preedit_text and goime.preedit_text ~= '' then
+        goime.client:enter()
+        return ''
+      end
+    end
+    return '<CR>'
+  end, { expr = true, desc = 'GoIME 回车', buffer = true })
+
+  -- Esc
+  vim.keymap.set('i', k(map.escape, '<Esc>'), function()
+    if goime.plugin_enabled and goime.client and goime.client:is_connected() then
+      goime.client:escape()
+    end
+    return '<Esc>'
+  end, { expr = true, desc = 'GoIME Escape', buffer = true })
+
+  -- Space
+  vim.keymap.set('i', k(map.space, '<Space>'), function()
+    if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
+      return '<Space>'
+    end
+    goime.client:space()
+    return ''
+  end, { expr = true, desc = 'GoIME 空格', buffer = true })
 
   -- 仅在启用且 auto_connect 时自动连接
   if goime.plugin_enabled and config.config.auto_connect then

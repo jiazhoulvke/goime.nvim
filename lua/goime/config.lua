@@ -24,8 +24,6 @@ M.defaults = {
   status_off = '',
   --- 中/英文切换键（右 Shift 等效；终端下无法区分左右 Shift，用 <S-Space> 代替）
   toggle_key = '<S-Space>',
-  --- 中/英标点模式（true=中文标点，false=英文标点）
-  ascii_punct = false,
   --- 是否自动在插入模式连接
   auto_connect = false,
   --- 客户端标识

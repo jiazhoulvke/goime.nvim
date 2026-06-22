@@ -4,6 +4,8 @@
 local M = {}
 
 M.defaults = {
+  --- 是否默认启用插件（false=禁用，用户需按 <C-;> 启用或设置 enabled=true）
+  enabled = false,
   --- Socket 路径，空则自动推导
   socket_path = '',
   --- goimed 可执行文件路径，空则从 PATH 查找
@@ -23,7 +25,7 @@ M.defaults = {
   --- 中/英标点模式（true=中文标点，false=英文标点）
   ascii_punct = false,
   --- 是否自动在插入模式连接
-  auto_connect = true,
+  auto_connect = false,
   --- 客户端标识
   client_name = 'nvim-goime-0.1',
   --- 调试模式

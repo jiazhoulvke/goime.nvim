@@ -20,6 +20,8 @@ local goime = {
   schemes = {},
   active_scheme = '', --- 插件是否启用
   input_context = nil,  --- 发送按键时的 buffer/window/cursor 上下文
+  quote_double = false, --- 双引号配对状态（false=下次输出左引号，true=下次输出右引号）
+  quote_single = false, --- 单引号配对状态
 }
 
 --- 保存当前 buffer/cursor 上下文（发送按键前调用）
@@ -194,7 +196,8 @@ function M.setup(opts)
       return k(map.page_prev, ',')
     end
     if not goime.preedit_text or goime.preedit_text == '' then
-      return k(map.page_prev, ',')
+      if config.config.ascii_punct then return ',' end
+      return config.config.punct_map[','] or '，'
     end
     goime.client:page('prev')
     return ''
@@ -205,7 +208,8 @@ function M.setup(opts)
       return k(map.page_next, '.')
     end
     if not goime.preedit_text or goime.preedit_text == '' then
-      return k(map.page_next, '.')
+      if config.config.ascii_punct then return '.' end
+      return config.config.punct_map['.'] or '。'
     end
     goime.client:page('next')
     return ''
@@ -223,6 +227,33 @@ function M.setup(opts)
         return ''
       end
       return c
+    end, { expr = true, silent = true })
+  end
+
+  -- 标点符号全角转换（排除 , . 已在上方翻页映射中处理，" ' 使用配对切换）
+  for ascii, fullwidth in pairs(config.config.punct_map or {}) do
+    if ascii == ',' or ascii == '.' or ascii == '"' or ascii == "'" then
+      goto continue_punct
+    end
+    vim.keymap.set('i', ascii, function()
+      if not goime.plugin_enabled or not goime.chinese_mode then return ascii end
+      if config.config.ascii_punct then return ascii end
+      return fullwidth
+    end, { expr = true, silent = true })
+    ::continue_punct::
+  end
+
+  -- 引号配对（左右切换）
+  for _, q in ipairs({ '"', "'" }) do
+    vim.keymap.set('i', q, function()
+      if not goime.plugin_enabled or not goime.chinese_mode then return q end
+      if config.config.ascii_punct then return q end
+      if q == '"' then
+        goime.quote_double = not goime.quote_double
+        return goime.quote_double and '\u{201C}' or '\u{201D}'
+      end
+      goime.quote_single = not goime.quote_single
+      return goime.quote_single and '\u{2018}' or '\u{2019}'
     end, { expr = true, silent = true })
   end
 
@@ -435,6 +466,33 @@ function M.on_insert_enter()
     end
     return '<Space>'
   end, { expr = true, desc = 'GoIME 空格', buffer = true })
+
+  -- 标点符号全角转换（buffer-local，覆盖 autopairs，" ' 使用配对切换）
+  for ascii, fullwidth in pairs(config.config.punct_map or {}) do
+    if ascii == ',' or ascii == '.' or ascii == '"' or ascii == "'" then
+      goto continue_bl_punct
+    end
+    vim.keymap.set('i', ascii, function()
+      if not goime.plugin_enabled or not goime.chinese_mode then return ascii end
+      if config.config.ascii_punct then return ascii end
+      return fullwidth
+    end, { expr = true, desc = 'GoIME 标点', buffer = true })
+    ::continue_bl_punct::
+  end
+
+  -- 引号配对（buffer-local，覆盖 autopairs）
+  for _, q in ipairs({ '"', "'" }) do
+    vim.keymap.set('i', q, function()
+      if not goime.plugin_enabled or not goime.chinese_mode then return q end
+      if config.config.ascii_punct then return q end
+      if q == '"' then
+        goime.quote_double = not goime.quote_double
+        return goime.quote_double and '\u{201C}' or '\u{201D}'
+      end
+      goime.quote_single = not goime.quote_single
+      return goime.quote_single and '\u{2018}' or '\u{2019}'
+    end, { expr = true, desc = 'GoIME 引号', buffer = true })
+  end
 
   -- 仅在启用且 auto_connect 时自动连接
   if goime.plugin_enabled and config.config.auto_connect then

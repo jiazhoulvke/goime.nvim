@@ -219,7 +219,9 @@ function Client:_start_goimed_tcp(port, callback)
 
   local host = config.config.host or '127.0.0.1'
   vim.notify('[goime] 正在启动 goimed (TCP ' .. host .. ':' .. port .. ')', vim.log.levels.INFO)
-  vim.fn.jobstart({ binary, '--listen', 'tcp', '--host', host, '--port', tostring(port) }, { detach = true })
+  vim.schedule(function()
+    vim.fn.jobstart({ binary, '--listen', 'tcp', '--host', host, '--port', tostring(port) }, { detach = true })
+  end)
   local retries = 0
   local max_retries = 12
 
@@ -278,14 +280,16 @@ function Client:_connect_unix(callback)
       return
     end
     -- 异步启动 goimed
-    vim.fn.jobstart({ binary }, {
-      detach = true,
-      on_stderr = function(_, data)
-        if data and config.config.debug then
-          vim.notify('[goime] ' .. vim.inspect(data), vim.log.levels.DEBUG)
-        end
-      end,
-    })
+    vim.schedule(function()
+      vim.fn.jobstart({ binary }, {
+        detach = true,
+        on_stderr = function(_, data)
+          if data and config.config.debug then
+            vim.notify('[goime] ' .. vim.inspect(data), vim.log.levels.DEBUG)
+          end
+        end,
+      })
+    end)
   end
 
   local handle = uv.new_pipe(false)

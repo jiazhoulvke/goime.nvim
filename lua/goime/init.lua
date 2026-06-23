@@ -407,6 +407,11 @@ end
 
 --- 进入插入模式时注册 buffer-local 映射并按需连接
 function M.on_insert_enter()
+  -- 插件禁用或非普通 buffer 时不设置映射
+  if not goime.plugin_enabled then return end
+  local bt = vim.bo.buftype
+  if bt ~= '' and bt ~= 'acwrite' then return end
+
   local map = config.config.mappings or {}
   local function k(key, fallback)
     return (key ~= nil and key ~= '') and key or fallback

@@ -57,11 +57,11 @@ end
 function UI:show(list, page, total_pages, preedit_text)
   self:close()
 
-  if not list or #list == 0 then
+  if (not list or #list == 0) and (preedit_text == nil or preedit_text == '') then
     return
   end
 
-  local lines = build_lines(preedit_text or '', list)
+  local lines = build_lines(preedit_text or '', list or {})
 
   -- 翻页信息行
   if total_pages > 1 then

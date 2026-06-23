@@ -10,16 +10,6 @@ local status = require('goime.status')
 
 local M = {}
 
---- 保存当前 buffer/cursor 上下文（发送按键前调用）
-local function save_input_context()
-  goime.input_context = {
-    bufnr = api.nvim_get_current_buf(),
-    win = api.nvim_get_current_win(),
-    row = api.nvim_win_get_cursor(0)[1],
-    col = api.nvim_win_get_cursor(0)[2],
-  }
-end
-
 --- 插件实例状态
 local goime = {
   client = nil,         ---@type table
@@ -31,6 +21,16 @@ local goime = {
   active_scheme = '', --- 插件是否启用
   input_context = nil,  --- 发送按键时的 buffer/window/cursor 上下文
 }
+
+--- 保存当前 buffer/cursor 上下文（发送按键前调用）
+local function save_input_context()
+  goime.input_context = {
+    bufnr = api.nvim_get_current_buf(),
+    win = api.nvim_get_current_win(),
+    row = api.nvim_win_get_cursor(0)[1],
+    col = api.nvim_win_get_cursor(0)[2],
+  }
+end
 
 --- 设置插件
 ---@param opts table|nil
@@ -94,14 +94,12 @@ function M.setup(opts)
     goime.preedit_text = resp.text or ''
     local candidates = resp.candidates
     local preedit = goime.preedit_text
-    if candidates and candidates.list and #candidates.list > 0 then
-      goime.ui:show(candidates.list, candidates.page or 0, candidates.total or 1, preedit)
-    else
-      goime.ui:close()
-    end
+    local clist = candidates and candidates.list
+    goime.ui:show(clist, candidates and candidates.page or 0, candidates and candidates.total or 1, preedit)
   end)
 
   goime.client:on('idle', function()
+    goime.preedit_text = ''
     goime.ui:close()
   end)
 
@@ -180,7 +178,7 @@ function M.setup(opts)
     M.toggle()
   end, { desc = 'GoIME 中/英文切换', silent = true })
 
-  vim.keymap.set('i', k(map.toggle_enable, '<C-;>'), function()
+  vim.keymap.set('i', k(map.toggle_enable, '<M-;>'), function()
     M.toggle_enabled()
   end, { desc = 'GoIME 插件启用/禁用', silent = true })
 
@@ -195,12 +193,18 @@ function M.setup(opts)
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
       return k(map.page_prev, ',')
     end
+    if not goime.preedit_text or goime.preedit_text == '' then
+      return k(map.page_prev, ',')
+    end
     goime.client:page('prev')
     return ''
   end, { desc = 'GoIME 上一页', expr = true, silent = true })
 
   vim.keymap.set('i', k(map.page_next, '.'), function()
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
+      return k(map.page_next, '.')
+    end
+    if not goime.preedit_text or goime.preedit_text == '' then
       return k(map.page_next, '.')
     end
     goime.client:page('next')
@@ -234,9 +238,12 @@ function M.setup(opts)
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
       return '<Space>'
     end
-    save_input_context()
-    goime.client:space()
-    return ''
+    if goime.preedit_text and goime.preedit_text ~= '' then
+      save_input_context()
+      goime.client:space()
+      return ''
+    end
+    return '<Space>'
   end, { expr = true, silent = true })
 
   -- 退格
@@ -245,8 +252,11 @@ function M.setup(opts)
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
       return '<BS>'
     end
-    goime.client:backspace()
-    return ''
+    if goime.preedit_text and goime.preedit_text ~= '' then
+      goime.client:backspace()
+      return ''
+    end
+    return '<BS>'
   end, { expr = true, silent = true })
 
   -- 回车：先发 enter 给 goime，再插入回车
@@ -258,7 +268,7 @@ function M.setup(opts)
       if goime.preedit_text and goime.preedit_text ~= '' then
         save_input_context()
         goime.client:enter()
-        return ''
+        return '<CR>'
       end
     end
     return '<CR>'
@@ -278,9 +288,12 @@ function M.setup(opts)
       if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
         return tostring(i)
       end
-      save_input_context()
-      goime.client:select(i - 1)
-      return ''
+      if goime.preedit_text and goime.preedit_text ~= '' then
+        save_input_context()
+        goime.client:select(i - 1)
+        return ''
+      end
+      return tostring(i)
     end, { expr = true, silent = true })
   end
   -- 0 选第 10 个候选（索引 9）
@@ -288,9 +301,12 @@ function M.setup(opts)
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
       return '0'
     end
-    save_input_context()
-    goime.client:select(9)
-    return ''
+    if goime.preedit_text and goime.preedit_text ~= '' then
+      save_input_context()
+      goime.client:select(9)
+      return ''
+    end
+    return '0'
   end, { expr = true, silent = true })
 end  -- no_default_mappings
 end
@@ -339,7 +355,7 @@ function M.toggle()
   end
 end
 
---- 插件启用/禁用（<C-;>）
+--- 插件启用/禁用（<M-;>）
 function M.toggle_enabled()
   goime.plugin_enabled = not goime.plugin_enabled
   goime.ui:close()
@@ -376,8 +392,10 @@ function M.on_insert_enter()
   -- BS
   vim.keymap.set('i', k(map.backspace, '<BS>'), function()
     if goime.plugin_enabled and goime.client and goime.client:is_connected() and goime.chinese_mode then
-      goime.client:backspace()
-      return ''
+      if goime.preedit_text and goime.preedit_text ~= '' then
+        goime.client:backspace()
+        return ''
+      end
     end
     return '<BS>'
   end, { expr = true, desc = 'GoIME 退格', buffer = true })
@@ -391,7 +409,7 @@ function M.on_insert_enter()
       if goime.preedit_text and goime.preedit_text ~= '' then
         save_input_context()
         goime.client:enter()
-        return ''
+        return '<CR>'
       end
     end
     return '<CR>'
@@ -410,9 +428,12 @@ function M.on_insert_enter()
     if not goime.plugin_enabled or not goime.client or not goime.client:is_connected() or not goime.chinese_mode then
       return '<Space>'
     end
-    save_input_context()
-    goime.client:space()
-    return ''
+    if goime.preedit_text and goime.preedit_text ~= '' then
+      save_input_context()
+      goime.client:space()
+      return ''
+    end
+    return '<Space>'
   end, { expr = true, desc = 'GoIME 空格', buffer = true })
 
   -- 仅在启用且 auto_connect 时自动连接

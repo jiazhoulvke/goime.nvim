@@ -4,7 +4,7 @@
 local M = {}
 
 M.defaults = {
-  --- 是否默认启用插件（false=禁用，用户需按 <C-;> 启用或设置 enabled=true）
+  --- 是否默认启用插件（false=禁用，用户需按 <M-;> 启用或设置 enabled=true）
   enabled = false,
   --- 默认中文模式（true=中文，false=英文；仅 enabled=true 时生效）
   default_chinese = true,
@@ -12,10 +12,10 @@ M.defaults = {
   socket_path = '',
   --- goimed 可执行文件路径，空则从 PATH 查找
   binary = '',
-  --- TCP 连接地址（port 非空时启用 TCP 模式）
+  --- TCP 连接地址
   host = '127.0.0.1',
-  --- TCP 端口，设置后启用 TCP 连接（空=使用 Unix socket）
-  port = nil,
+  --- TCP 端口（默认 11527，设为 0 则使用 Unix socket 模式）
+  port = 11527,
   --- 中文模式状态栏显示文本
   status_cn = '中',
   --- 英文模式状态栏显示文本
@@ -54,9 +54,7 @@ M.config = vim.deepcopy(M.defaults)
 function M.setup(opts)
   opts = opts or {}
   for k, v in pairs(opts) do
-    if M.config[k] ~= nil then
-      M.config[k] = v
-    end
+    M.config[k] = v
   end
 end
 

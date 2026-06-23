@@ -85,8 +85,8 @@ function Client:connect(callback)
     return
   end
 
-  -- TCP 模式（配置了 port）
-  if config.config.port then
+  -- TCP 模式（配置了 port > 0）
+  if config.config.port and config.config.port > 0 then
     self:_connect_tcp(callback)
     return
   end
@@ -108,8 +108,6 @@ function Client:_read_port_file()
   if ok and #lines > 0 then
     local p = tonumber(lines[1])
     if p and p > 0 then return p end
-  elseif not ok then
-    vim.schedule(function() vim.api.nvim_notify('[goime] 读取端口文件失败: ' .. tostring(lines), vim.log.levels.WARN, {}) end)
   end
   return nil
 end

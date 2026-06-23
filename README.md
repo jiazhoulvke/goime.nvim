@@ -24,7 +24,7 @@ vim.cmd('set rtp+=~/workspace/vim/goime.nvim')
 require('goime').setup()
 ```
 
-默认插件禁用，按 `<C-;>` 启用。也可以传入 `enabled = true` 使初始化时自动启用：
+默认插件禁用，按 `<M-;>` 启用。也可以传入 `enabled = true` 使初始化时自动启用：
 
 ```lua
 require('goime').setup({ enabled = true })
@@ -34,7 +34,7 @@ require('goime').setup({ enabled = true })
 
 ```lua
 require('goime').setup({
-  -- 是否默认启用插件（false=禁用，按 <C-;> 启用或传 true 表示默认启用）
+  -- 是否默认启用插件（false=禁用，按 <M-;> 启用或传 true 表示默认启用）
   enabled = false,
 
   -- 默认中文模式（true=中文，false=英文；仅 enabled=true 时生效）
@@ -46,11 +46,11 @@ require('goime').setup({
   -- goimed 可执行文件路径（空=从 PATH 查找）
   binary = '',
 
-  -- TCP 连接地址（仅 port 非空时生效）
+  -- TCP 连接地址
   host = '127.0.0.1',
 
-  -- TCP 端口（nil=使用 Unix Socket，设值后自动切换到 TCP 模式）
-  port = nil,
+  -- TCP 端口（默认 11527，设为 0 则使用 Unix Socket 模式）
+  port = 11527,
 
   -- 每页候选数
   page_size = 5,
@@ -76,7 +76,7 @@ require('goime').setup({
   -- 按键映射（nil=使用默认）
   mappings = {
     toggle = nil,          -- 中/英切换（默认 <S-Space>）
-    toggle_enable = nil,   -- 启用/禁用（默认 <C-;>）
+    toggle_enable = nil,   -- 启用/禁用（默认 <M-;>）
     page_prev = nil,       -- 上一页（默认 ,）
     page_next = nil,       -- 下一页（默认 .）
     space = nil,           -- 空格选词（默认 <Space>）
@@ -122,7 +122,7 @@ require('goime').setup({
 | 按键 | 模式 | 说明 |
 |------|------|------|
 | `<S-Space>` | i | 中/英文输入模式切换 |
-| `<C-;>` | i | 插件启用/禁用切换 |
+| `<M-;>` | i | 插件启用/禁用切换 |
 
 ### 自定义映射
 
@@ -132,7 +132,7 @@ require('goime').setup({
 require('goime').setup({
   mappings = {
     toggle = '<C-Space>',     -- 中/英切换（默认 <S-Space>）
-    toggle_enable = '<F2>',   -- 启用/禁用（默认 <C-;>）
+    toggle_enable = '<F2>',   -- 启用/禁用（默认 <M-;>）
     page_prev = '<PageUp>',   -- 上一页（默认 ,）
     page_next = '<PageDown>', -- 下一页（默认 .）
     space = '<C-f>',          -- 空格选词（默认 <Space>）
@@ -154,7 +154,7 @@ require('goime').setup({
 })
 ```
 
-禁用后你仍需自行定义 `a-z`、数字选词、翻页等映射。`<S-Space>` 和 `<C-;>` 不受此选项影响。
+禁用后你仍需自行定义 `a-z`、数字选词、翻页等映射。`<S-Space>` 和 `<M-;>` 不受此选项影响。
 
 ## 候选窗
 
@@ -249,12 +249,11 @@ goime.cycle_scheme(dir)  -- 循环切换方案
 
 ## TCP 支持
 
-goime.nvim 支持 TCP 连接。配置 `port` 即可自动切换到 TCP 模式：
+默认使用 TCP 连接（端口 11527）。如需使用 Unix Socket 模式，将 `port` 设为 0：
 
 ```lua
 require('goime').setup({
-  port = 11527,
-  host = '127.0.0.1', -- 可选，默认 127.0.0.1
+  port = 0,  -- 切换到 Unix Socket 模式
 })
 ```
 

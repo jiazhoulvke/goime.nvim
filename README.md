@@ -61,8 +61,14 @@ require('goime').setup({
   -- 自动连接（true=进入插入模式自动连接，false=手动）
   auto_connect = false,
 
-  -- 中/英标点模式（true=中文标点，false=英文标点）
+  -- 中/英标点模式（false=中文标点，true=英文标点）
   ascii_punct = false,
+
+  -- 标点映射表（ASCII → 全角）
+  punct_map = {
+    [','] = '，', ['.'] = '。', ['/'] = '、',
+    -- 全部 16 组映射见 config.lua 默认值
+  },
 
   -- 客户端标识
   client_name = 'nvim-goime-0.1',
@@ -155,6 +161,21 @@ require('goime').setup({
 ```
 
 禁用后你仍需自行定义 `a-z`、数字选词、翻页等映射。`<S-Space>` 和 `<M-;>` 不受此选项影响。
+
+### 中文标点符号
+
+中文模式下标点自动转全角，`ascii_punct` 设为 `true` 关闭。通过 `punct_map` 自定义：
+
+```lua
+require('goime').setup({
+  punct_map = {
+    ['"'] = '"',  -- 双引号不转换
+    ['/'] = '、', -- 斜线改顿号
+  },
+})
+```
+
+引号支持左右配对：第一次输入 `"` 输出 `"`，第二次输出 `"`。单引号同理 `' → ''`。
 
 ## 候选窗
 

@@ -399,6 +399,8 @@ function M.toggle_enabled()
     if not goime.client or not goime.client:is_connected() then
       M.connect()
     end
+    -- 已在插入模式时立即设置 buffer-local 映射
+    if vim.fn.mode() == 'i' then M.on_insert_enter() end
     vim.notify('GoIME: 已启用', vim.log.levels.INFO)
   else
     vim.notify('GoIME: 已禁用', vim.log.levels.INFO)

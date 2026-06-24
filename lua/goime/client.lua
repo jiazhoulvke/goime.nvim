@@ -218,7 +218,9 @@ function Client:_start_goimed_tcp(port, callback)
   end
 
   local host = config.config.host or '127.0.0.1'
-  vim.notify('[goime] 正在启动 goimed (TCP ' .. host .. ':' .. port .. ')', vim.log.levels.INFO)
+  if config.config.debug then
+    vim.notify('[goime] 正在启动 goimed (TCP ' .. host .. ':' .. port .. ')', vim.log.levels.INFO)
+  end
   vim.schedule(function()
     vim.fn.jobstart({ binary, '--listen', 'tcp', '--host', host, '--port', tostring(port) }, { detach = true })
   end)

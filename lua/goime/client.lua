@@ -62,7 +62,7 @@ function Client:_find_binary()
     return 'goimed'
   end
   -- GVim/桌面环境可能不含 ~/go/bin，检查常见位置
-  local home = vim.fn.expand('$HOME')
+  local home = os.getenv('HOME')
   if home and home ~= '' then
     local candidates = {
       home .. '/go/bin/goimed',
@@ -98,9 +98,9 @@ end
 --- 读取端口文件
 ---@return number|nil
 function Client:_read_port_file()
-  local home = (vim.fn.expand('$HOME') or ''):gsub('\\', '/')
+  local home = (os.getenv('HOME') or ''):gsub('\\', '/')
   if home == '' then
-    home = (vim.fn.expand('$USERPROFILE') or ''):gsub('\\', '/')
+    home = (os.getenv('USERPROFILE') or ''):gsub('\\', '/')
   end
   if home == '' then return nil end
   local path = home .. '/.cache/goime/goime.port'
